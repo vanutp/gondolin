@@ -429,6 +429,22 @@ export class MountRouterProvider
     this.ensureVirtualDir(entryPath, "access");
   }
 
+  async chmod(entryPath: string, mode: number) {
+    const mount = this.requireMount(entryPath, "chmod");
+    if (!mount.provider.chmod) {
+      throw createErrnoError(ERRNO.ENOSYS, "chmod", entryPath);
+    }
+    return mount.provider.chmod(mount.relativePath, mode);
+  }
+
+  chmodSync(entryPath: string, mode: number) {
+    const mount = this.requireMount(entryPath, "chmod");
+    if (!mount.provider.chmodSync) {
+      throw createErrnoError(ERRNO.ENOSYS, "chmod", entryPath);
+    }
+    return mount.provider.chmodSync(mount.relativePath, mode);
+  }
+
   async statfs(entryPath: string): Promise<VfsStatfs> {
     const mount = this.resolveMount(entryPath);
     if (mount) {

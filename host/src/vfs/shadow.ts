@@ -721,6 +721,44 @@ export class ShadowProvider
     return super.accessSync(p, mode);
   }
 
+  async chmod(entryPath: string, mode: number) {
+    const p = normalizeVfsPath(entryPath);
+    if (
+      this.shadowedFor("chmod", p) ||
+      (await this.resolvesToShadowed("chmod", p))
+    ) {
+      return this.writeShadowed("chmod", p, async () => {
+        if (!this.tmpfs.chmod) {
+          throw createErrnoError(ERRNO.ENOSYS, "chmod", p);
+        }
+        await this.tmpfs.chmod(p, mode);
+      });
+    }
+    if (!this.backend.chmod) {
+      throw createErrnoError(ERRNO.ENOSYS, "chmod", p);
+    }
+    return this.backend.chmod(p, mode);
+  }
+
+  chmodSync(entryPath: string, mode: number) {
+    const p = normalizeVfsPath(entryPath);
+    if (
+      this.shadowedFor("chmod", p) ||
+      this.resolvesToShadowedSync("chmod", p)
+    ) {
+      return this.writeShadowedSync("chmod", p, () => {
+        if (!this.tmpfs.chmodSync) {
+          throw createErrnoError(ERRNO.ENOSYS, "chmod", p);
+        }
+        this.tmpfs.chmodSync(p, mode);
+      });
+    }
+    if (!this.backend.chmodSync) {
+      throw createErrnoError(ERRNO.ENOSYS, "chmod", p);
+    }
+    return this.backend.chmodSync(p, mode);
+  }
+
   async statfs(entryPath: string): Promise<VfsStatfs> {
     const normalizedPath = normalizeVfsPath(entryPath);
     return delegateStatfsOrEnosys(this.backend, normalizedPath);

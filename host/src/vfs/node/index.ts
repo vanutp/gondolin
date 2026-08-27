@@ -134,6 +134,8 @@ export type VirtualProvider = {
   realpathSync?(path: string, options?: object): string;
   access?(path: string, mode?: number): Promise<void>;
   accessSync?(path: string, mode?: number): void;
+  chmod?(path: string, mode: number): Promise<void>;
+  chmodSync?(path: string, mode: number): void;
   readlink?(path: string, options?: object): Promise<string>;
   readlinkSync?(path: string, options?: object): string;
   symlink?(target: string, path: string, type?: string): Promise<void>;

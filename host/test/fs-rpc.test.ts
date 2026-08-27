@@ -5,7 +5,9 @@ import path from "node:path";
 import test from "node:test";
 
 import { MemoryProvider, RealFSProvider } from "../src/vfs/node/index.ts";
+import { MountRouterProvider } from "../src/vfs/mounts.ts";
 import { ReadonlyProvider } from "../src/vfs/readonly.ts";
+import { SandboxVfsProvider } from "../src/vfs/provider.ts";
 import { FsRpcService, MAX_RPC_DATA } from "../src/vfs/rpc-service.ts";
 
 const { errno: ERRNO } = os.constants;
@@ -119,6 +121,79 @@ test("fs rpc create/write/read", async () => {
 
   await send(service, "release", { fh });
   await service.close();
+});
+
+test("fs rpc chmod updates memory provider permissions", async () => {
+  const service = createService();
+
+  const create = await send(service, "create", {
+    parent_ino: 1,
+    name: "script.sh",
+    mode: 0o644,
+    flags: 0,
+  });
+  assert.equal(create.p.err, 0);
+  const ino = (create.p.res?.entry as { ino: number }).ino;
+
+  const chmod = await send(service, "chmod", { ino, mode: 0o754 });
+  assert.equal(chmod.p.err, 0);
+
+  const getattr = await send(service, "getattr", { ino });
+  assert.equal(getattr.p.err, 0);
+  const attr = getattr.p.res?.attr as { mode: number };
+  assert.equal(attr.mode & 0o7777, 0o754);
+
+  await service.close();
+});
+
+test("fs rpc chmod routes through mounts and hooks", async () => {
+  const memory = new MemoryProvider();
+  const modes: number[] = [];
+  const provider = new SandboxVfsProvider(
+    new MountRouterProvider({ "/": memory }),
+    {
+      before: (context) =>
+        context.op === "chmod" && modes.push(context.mode!),
+    },
+  );
+  const service = new FsRpcService(provider);
+
+  const create = await send(service, "create", {
+    parent_ino: 1,
+    name: "mounted.sh",
+    mode: 0o644,
+    flags: 0,
+  });
+  const ino = (create.p.res?.entry as { ino: number }).ino;
+  const chmod = await send(service, "chmod", { ino, mode: 0o100755 });
+
+  assert.equal(chmod.p.err, 0);
+  assert.deepEqual(modes, [0o755]);
+  assert.equal((await memory.stat("/mounted.sh")).mode & 0o7777, 0o755);
+  await service.close();
+});
+
+test("fs rpc chmod updates real filesystem permissions", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "gondolin-chmod-"));
+  try {
+    await fs.writeFile(path.join(root, "script.sh"), "#!/bin/sh\n", {
+      mode: 0o644,
+    });
+    const service = new FsRpcService(new RealFSProvider(root));
+    const lookup = await send(service, "lookup", {
+      parent_ino: 1,
+      name: "script.sh",
+    });
+    const ino = (lookup.p.res?.entry as { ino: number }).ino;
+
+    const chmod = await send(service, "chmod", { ino, mode: 0o700 });
+    assert.equal(chmod.p.err, 0);
+    assert.equal((await fs.stat(path.join(root, "script.sh"))).mode & 0o7777, 0o700);
+
+    await service.close();
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
 });
 
 test("fs rpc readdir offsets", async () => {

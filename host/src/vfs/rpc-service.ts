@@ -189,6 +189,8 @@ export class FsRpcService {
         return this.handleLink(req);
       case "access":
         return this.handleAccess(req);
+      case "chmod":
+        return this.handleChmod(req);
       case "truncate":
         return this.handleTruncate(req);
       case "fallocate":
@@ -564,6 +566,17 @@ export class FsRpcService {
     }
 
     await checkAccessByStat(this.provider, entryPath, mask, uid, gid);
+    return {};
+  }
+
+  private async handleChmod(req: Record<string, unknown>) {
+    const ino = requireUint(req.ino, "chmod", "ino");
+    const mode = requireUint(req.mode, "chmod", "mode") & 0o7777;
+    const entryPath = this.requirePath(ino, "chmod");
+    if (!this.provider.chmod) {
+      throw createErrnoError(ERRNO.ENOSYS, "chmod", entryPath);
+    }
+    await this.provider.chmod(entryPath, mode);
     return {};
   }
 

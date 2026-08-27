@@ -4,6 +4,8 @@ All notable changes to Gondolin are documented here.
 
 ## Unreleased
 
+- Fix `chmod` on hostfs and memfs VFS mounts #115
+
 ## 0.12.0
 
 - Add `VM.getHostPid()` to allow callers to collect host-side process metrics of the VM runner. #114

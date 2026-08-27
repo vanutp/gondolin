@@ -519,6 +519,20 @@ class MemoryProvider extends VirtualProvider {
     return this.lstatSync(path, options);
   }
 
+  // XXX(patch): Custom code/changes added for Gondolin
+  chmodSync(path, mode) {
+    if (this[kReadonly]) {
+      throw createEROFS('chmod', path);
+    }
+    const entry = this._getEntry(path, 'chmod', true);
+    entry.mode = mode & 0o7777;
+    entry.ctime = DateNow();
+  }
+
+  async chmod(path, mode) {
+    this.chmodSync(path, mode);
+  }
+
   readdirSync(path, options) {
     const entry = this._getEntry(path, 'scandir', true);
     if (!entry.isDirectory()) {

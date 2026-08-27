@@ -158,6 +158,32 @@ test(
 );
 
 test(
+  "vfs chmod makes guest files executable",
+  { skip: skipVmTests, timeout: timeoutMs },
+  async () => {
+    await withVm(sharedVmKey, sharedVmOptions, async (vm) => {
+      await vm.start();
+
+      const result = await withTimeout(
+        vm.exec([
+          "/bin/sh",
+          "-c",
+          "printf '#!/bin/sh\\necho executable\\n' > /data/script.sh; chmod 754 /data/script.sh; /data/script.sh; stat -c %a /data/script.sh",
+        ]),
+        timeoutMs,
+      );
+      if (result.exitCode !== 0) {
+        throw new Error(
+          `chmod test failed (exit ${result.exitCode}): ${result.stderr.trim()}`,
+        );
+      }
+      assert.equal(result.stdout, "executable\n754\n");
+      assert.equal((await rootProvider.stat("/script.sh")).mode & 0o7777, 0o754);
+    });
+  },
+);
+
+test(
   "vfs can read large files without truncation",
   { skip: skipVmTests, timeout: timeoutMs },
   async () => {

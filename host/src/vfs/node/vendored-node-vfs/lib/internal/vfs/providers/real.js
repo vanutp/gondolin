@@ -469,6 +469,17 @@ class RealFSProvider extends VirtualProvider {
     return fs.promises.access(realPath, mode);
   }
 
+  // XXX(patch): Custom code/changes added for Gondolin
+  chmodSync(vfsPath, mode) {
+    const realPath = this._resolvePathFollow(vfsPath);
+    fs.chmodSync(realPath, mode);
+  }
+
+  async chmod(vfsPath, mode) {
+    const realPath = this._resolvePathFollow(vfsPath);
+    return fs.promises.chmod(realPath, mode);
+  }
+
   copyFileSync(srcVfsPath, destVfsPath, mode) {
     const srcRealPath = this._resolvePathFollow(srcVfsPath);
     const destRealPath = this._resolvePathFollow(destVfsPath);

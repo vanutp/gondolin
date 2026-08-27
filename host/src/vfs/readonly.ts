@@ -158,6 +158,14 @@ export class ReadonlyProvider
     return super.accessSync(path, mode);
   }
 
+  async chmod(path: string, _mode: number): Promise<void> {
+    throw createErrnoError(ERRNO.EROFS, "chmod", path);
+  }
+
+  chmodSync(path: string, _mode: number): void {
+    throw createErrnoError(ERRNO.EROFS, "chmod", path);
+  }
+
   async statfs(path: string): Promise<VfsStatfs> {
     return delegateStatfsOrEnosys(this.backend, path);
   }

@@ -121,4 +121,12 @@ export abstract class ReadonlyVirtualProvider
   async readlink(entryPath: string, options?: object): Promise<string> {
     return this.readlinkSync(entryPath, options);
   }
+
+  async chmod(entryPath: string, mode: number): Promise<void> {
+    return this.chmodSync(entryPath, mode);
+  }
+
+  chmodSync(entryPath: string, _mode: number): void {
+    throw createErrnoError(ERRNO.EROFS, "chmod", entryPath);
+  }
 }
