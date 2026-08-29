@@ -237,6 +237,79 @@ test("fs rpc readdir offsets", async () => {
   await service.close();
 });
 
+test("fs rpc directory handles keep pagination stable across mutations", async () => {
+  const service = createService();
+
+  for (const name of ["a.txt", "b.txt", "c.txt", "d.txt"]) {
+    const create = await send(service, "create", {
+      parent_ino: 1,
+      name,
+      mode: 0o644,
+      flags: 0,
+    });
+    assert.equal(create.p.err, 0);
+  }
+
+  const open = await send(service, "opendir", { ino: 1 });
+  assert.equal(open.p.err, 0);
+  const fh = open.p.res?.fh as number;
+
+  const complete = await send(service, "readdir", {
+    fh,
+    offset: 0,
+    max_entries: 128,
+  });
+  const completeEntries = complete.p.res?.entries as Array<{
+    name: string;
+    offset: number;
+  }>;
+  assert.equal(completeEntries.length, 4);
+
+  const first = await send(service, "readdir", {
+    fh,
+    offset: 0,
+    max_entries: 2,
+  });
+  const firstEntries = first.p.res?.entries as Array<{
+    name: string;
+    offset: number;
+  }>;
+  assert.equal(firstEntries.length, 2);
+
+  for (const entry of firstEntries) {
+    const unlink = await send(service, "unlink", {
+      parent_ino: 1,
+      name: entry.name,
+    });
+    assert.equal(unlink.p.err, 0);
+  }
+
+  const second = await send(service, "readdir", {
+    fh,
+    offset: firstEntries.at(-1)?.offset,
+    max_entries: 128,
+  });
+  assert.equal(second.p.err, 0);
+  const secondNames = (
+    second.p.res?.entries as Array<{ name: string }>
+  ).map((entry) => entry.name);
+  assert.deepEqual(
+    secondNames,
+    completeEntries.slice(firstEntries.length).map((entry) => entry.name),
+  );
+
+  const release = await send(service, "releasedir", { fh });
+  assert.equal(release.p.err, 0);
+  const afterRelease = await send(service, "readdir", {
+    fh,
+    offset: 0,
+    max_entries: 1,
+  });
+  assert.equal(afterRelease.p.err, ERRNO.EBADF);
+
+  await service.close();
+});
+
 test("fs rpc readdir caches paginated listings and invalidates on mutations", async () => {
   const base = new MemoryProvider();
   let readdirCalls = 0;

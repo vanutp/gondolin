@@ -78,12 +78,23 @@ type ReaddirCacheEntry = {
   expiresAt: number;
 };
 
+type DirectoryEntrySnapshot = {
+  ino: number;
+  name: string;
+  type: number;
+};
+
+type DirectoryHandleEntry = {
+  entries: DirectoryEntrySnapshot[];
+};
+
 export class FsRpcService {
   private nextIno = 2;
   private nextHandle = 1;
   private readonly pathToIno = new Map<string, number>();
   private readonly inoToPaths = new Map<number, Set<string>>();
   private readonly handles = new Map<number, HandleEntry>();
+  private readonly directoryHandles = new Map<number, DirectoryHandleEntry>();
   private readonly readdirCache = new Map<string, ReaddirCacheEntry>();
   private readonly readdirInFlight = new Map<
     string,
@@ -143,6 +154,7 @@ export class FsRpcService {
   async close() {
     const handles = Array.from(this.handles.values());
     this.handles.clear();
+    this.directoryHandles.clear();
     this.readdirCache.clear();
     this.readdirInFlight.clear();
     this.readdirCacheVersion += 1;
@@ -165,8 +177,12 @@ export class FsRpcService {
         return this.handleGetattr(req);
       case "readlink":
         return this.handleReadlink(req);
+      case "opendir":
+        return this.handleOpendir(req);
       case "readdir":
         return this.handleReaddir(req);
+      case "releasedir":
+        return this.handleReleasedir(req);
       case "open":
         return this.handleOpen(req);
       case "read":
@@ -249,9 +265,17 @@ export class FsRpcService {
     return { target };
   }
 
+  private async handleOpendir(req: Record<string, unknown>) {
+    const ino = requireUint(req.ino, "opendir", "ino");
+    const entryPath = this.requirePath(ino, "opendir");
+    const entries = await this.snapshotDirectoryEntries(entryPath);
+
+    const fh = this.nextHandle++;
+    this.directoryHandles.set(fh, { entries });
+    return { fh, open_flags: 0 };
+  }
+
   private async handleReaddir(req: Record<string, unknown>) {
-    const ino = requireUint(req.ino, "readdir", "ino");
-    const entryPath = this.requirePath(ino, "readdir");
     const offset = requireUint(req.offset ?? 0, "readdir", "offset");
     const maxEntries = Math.max(
       1,
@@ -260,41 +284,44 @@ export class FsRpcService {
         requireUint(req.max_entries ?? 1024, "readdir", "max_entries"),
       ),
     );
-    const entries = await this.readCachedDirEntries(entryPath);
-    const start = Math.min(offset, entries.length);
 
-    const responseEntries: Array<Record<string, unknown>> = [];
-    for (
-      let index = start;
-      index < entries.length && responseEntries.length < maxEntries;
-      index += 1
-    ) {
-      const entry = entries[index];
-      const name = typeof entry === "string" ? entry : entry.name;
-      if (!name || name.includes("/") || name.includes("\0")) {
-        continue;
+    let entries: DirectoryEntrySnapshot[];
+    if (req.fh !== undefined) {
+      const fh = requireUint(req.fh, "readdir", "fh");
+      const directory = this.directoryHandles.get(fh);
+      if (!directory) {
+        throw createErrnoError(ERRNO.EBADF, "readdir");
       }
-      const childPath = normalizePath(path.posix.join(entryPath, name));
-      const childIno = this.ensureIno(childPath);
-      const type = await direntType(entry, childPath, this.provider);
-      responseEntries.push({
-        ino: childIno,
-        name,
-        type,
-        offset: index + 1,
-      });
+      entries = directory.entries;
+    } else {
+      // Compatibility for older guests that issue readdir without opendir.
+      const ino = requireUint(req.ino, "readdir", "ino");
+      const entryPath = this.requirePath(ino, "readdir");
+      entries = await this.snapshotDirectoryEntries(entryPath);
     }
 
+    const start = Math.min(offset, entries.length);
+    const page = entries.slice(start, start + maxEntries);
+    const responseEntries = page.map((entry, index) => ({
+      ...entry,
+      offset: start + index + 1,
+    }));
     const nextOffset =
-      start + responseEntries.length >= entries.length
-        ? 0
-        : start + responseEntries.length;
+      start + page.length >= entries.length ? 0 : start + page.length;
 
     return {
       entries: responseEntries,
       next_offset: nextOffset,
       entry_ttl_ms: DEFAULT_ENTRY_TTL_MS,
     };
+  }
+
+  private async handleReleasedir(req: Record<string, unknown>) {
+    const fh = requireUint(req.fh, "releasedir", "fh");
+    if (!this.directoryHandles.delete(fh)) {
+      throw createErrnoError(ERRNO.EBADF, "releasedir");
+    }
+    return {};
   }
 
   private async handleOpen(req: Record<string, unknown>) {
@@ -748,6 +775,24 @@ export class FsRpcService {
             : "";
       this.logger(`op=${op} err=${err} dur=${durationMs}ms${extra}`);
     }
+  }
+
+  private async snapshotDirectoryEntries(entryPath: string) {
+    const rawEntries = await this.readCachedDirEntries(entryPath);
+    const entries: DirectoryEntrySnapshot[] = [];
+    for (const entry of rawEntries) {
+      const name = typeof entry === "string" ? entry : entry.name;
+      if (!name || name.includes("/") || name.includes("\0")) {
+        continue;
+      }
+      const childPath = normalizePath(path.posix.join(entryPath, name));
+      entries.push({
+        ino: this.ensureIno(childPath),
+        name,
+        type: await direntType(entry, childPath, this.provider),
+      });
+    }
+    return entries;
   }
 
   private async readCachedDirEntries(entryPath: string) {

@@ -323,7 +323,7 @@ const SandboxFs = struct {
             FuseOp.OPEN => try self.handleOpen(header, payload),
             FuseOp.OPENDIR => try self.handleOpendir(header),
             FuseOp.READDIR => try self.handleReaddir(header, payload),
-            FuseOp.RELEASEDIR => try self.handleReleaseDir(header),
+            FuseOp.RELEASEDIR => try self.handleReleaseDir(header, payload),
             FuseOp.READ => try self.handleRead(header, payload),
             FuseOp.WRITE => try self.handleWrite(header, payload),
             FuseOp.CREATE => try self.handleCreate(header, payload),
@@ -725,7 +725,26 @@ const SandboxFs = struct {
     }
 
     fn handleOpendir(self: *SandboxFs, header: FuseInHeader) !void {
-        const out = FuseOpenOut{ .fh = header.nodeid, .open_flags = 0, .padding = 0 };
+        if (self.rpc == null) {
+            try sendError(self.fuse_fd, header.unique, std.os.linux.E.NOSYS);
+            return;
+        }
+
+        var fields = [_]fs_rpc.Field{
+            .{ .name = "ino", .value = .{ .UInt = header.nodeid } },
+        };
+        var response = try self.rpc.?.request("opendir", &fields);
+        defer response.deinit();
+
+        if (response.err != 0) {
+            try sendError(self.fuse_fd, header.unique, errnoFromResponse(response.err));
+            return;
+        }
+
+        const res_map = response.res orelse return error.InvalidResponse;
+        const fh = getMapU64(res_map, "fh") orelse return error.InvalidResponse;
+        const open_flags = getMapU32(res_map, "open_flags") orelse 0;
+        const out = FuseOpenOut{ .fh = fh, .open_flags = open_flags, .padding = 0 };
         try sendResponse(self.fuse_fd, header.unique, 0, std.mem.asBytes(&out));
     }
 
@@ -739,6 +758,7 @@ const SandboxFs = struct {
         const max_entries = @max(@as(u32, 1), read_in.size / 256);
 
         var fields = [_]fs_rpc.Field{
+            .{ .name = "fh", .value = .{ .UInt = read_in.fh } },
             .{ .name = "ino", .value = .{ .UInt = header.nodeid } },
             .{ .name = "offset", .value = .{ .UInt = read_in.offset } },
             .{ .name = "max_entries", .value = .{ .UInt = max_entries } },
@@ -791,7 +811,24 @@ const SandboxFs = struct {
         try sendResponse(self.fuse_fd, header.unique, 0, buf.items);
     }
 
-    fn handleReleaseDir(self: *SandboxFs, header: FuseInHeader) !void {
+    fn handleReleaseDir(self: *SandboxFs, header: FuseInHeader, payload: []const u8) !void {
+        if (self.rpc == null) {
+            try sendError(self.fuse_fd, header.unique, std.os.linux.E.NOSYS);
+            return;
+        }
+
+        const release = try parseRelease(payload);
+        var fields = [_]fs_rpc.Field{
+            .{ .name = "fh", .value = .{ .UInt = release.fh } },
+        };
+        var response = try self.rpc.?.request("releasedir", &fields);
+        defer response.deinit();
+
+        if (response.err != 0) {
+            try sendError(self.fuse_fd, header.unique, errnoFromResponse(response.err));
+            return;
+        }
+
         try sendResponse(self.fuse_fd, header.unique, 0, &.{});
     }
 
