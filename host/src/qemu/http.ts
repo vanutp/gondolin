@@ -1358,18 +1358,24 @@ export async function fetchHookRequestAndRespond(
           protocol,
         })
       : null;
-
     const bodyInit = bodyStream
       ? bodyStream
       : currentRequest.body
         ? new Uint8Array(currentRequest.body)
         : undefined;
+    const upstreamHeaders = { ...currentRequest.headers };
+
+    // Undici derives Content-Length from buffered bodies and selects chunked
+    // transfer framing for streams; forwarding it would create a duplicate value.
+    if (useDefaultFetch) {
+      delete upstreamHeaders["content-length"];
+    }
 
     let response: FetchResponse;
     try {
       response = await fetcher(currentUrl.toString(), {
         method: currentRequest.method,
-        headers: currentRequest.headers,
+        headers: upstreamHeaders,
         body: bodyInit as any,
         redirect: "manual",
         ...(bodyStream ? { duplex: "half" } : {}),
