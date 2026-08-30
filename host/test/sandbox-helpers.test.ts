@@ -530,7 +530,7 @@ test("resolveSandboxBinaryPaths: registry failures do not source-build by defaul
   }
 });
 
-test("resolveSandboxBinaryPaths: source builds require explicit env opt-in", async () => {
+test("resolveSandboxBinaryPaths: source build opt-in bypasses registry", async () => {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "gondolin-helpers-"));
   const guestDir = path.join(tmpDir, "guest");
   const stubDir = path.join(tmpDir, "bin");
@@ -585,7 +585,7 @@ test("resolveSandboxBinaryPaths: source builds require explicit env opt-in", asy
       () => {},
     );
 
-    assert.equal(fetchCalls, 1);
+    assert.equal(fetchCalls, 0);
     assert.equal(
       fs.readFileSync(paths.sandboxsshPath, "utf8"),
       "#!/bin/sh\necho source-sandboxssh\n",

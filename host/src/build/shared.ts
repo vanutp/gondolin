@@ -445,6 +445,15 @@ export async function resolveSandboxBinaryPaths(
     return paths;
   }
 
+  if (envFlagEnabled(BUILD_SANDBOX_HELPERS_FROM_SOURCE_ENV)) {
+    log(
+      `Building sandbox helpers from source because ${BUILD_SANDBOX_HELPERS_FROM_SOURCE_ENV}=1`,
+    );
+    const paths = await buildSandboxBinaryPathsFromSource(config.arch, log);
+    assertSandboxBinaryPathsExist(paths);
+    return paths;
+  }
+
   try {
     const resolved = await ensureSandboxHelperBinaries({
       arch: config.arch,
@@ -453,27 +462,16 @@ export async function resolveSandboxBinaryPaths(
     assertSandboxBinaryPathsExist(resolved.paths);
     return resolved.paths;
   } catch (error) {
-    if (!envFlagEnabled(BUILD_SANDBOX_HELPERS_FROM_SOURCE_ENV)) {
-      throw new Error(
-        `Could not resolve published sandbox helper binaries for ${config.arch}.\n` +
-          "Set GONDOLIN_SANDBOX_HELPERS_DIR to a directory containing " +
-          "bin/sandboxd, bin/sandboxfs, bin/sandboxssh, and " +
-          "bin/sandboxingress, or provide all four sandbox helper paths " +
-          "in the build config.\n" +
-          `Contributors can set ${BUILD_SANDBOX_HELPERS_FROM_SOURCE_ENV}=1 to build helpers from Zig sources instead.\n` +
-          `Cause: ${errorMessage(error)}`,
-      );
-    }
-
-    log(`Could not resolve published sandbox helpers: ${errorMessage(error)}`);
-    log(
-      `Falling back to Zig source build because ${BUILD_SANDBOX_HELPERS_FROM_SOURCE_ENV}=1`,
+    throw new Error(
+      `Could not resolve published sandbox helper binaries for ${config.arch}.\n` +
+        "Set GONDOLIN_SANDBOX_HELPERS_DIR to a directory containing " +
+        "bin/sandboxd, bin/sandboxfs, bin/sandboxssh, and " +
+        "bin/sandboxingress, or provide all four sandbox helper paths " +
+        "in the build config.\n" +
+        `Contributors can set ${BUILD_SANDBOX_HELPERS_FROM_SOURCE_ENV}=1 to build helpers from Zig sources instead.\n` +
+        `Cause: ${errorMessage(error)}`,
     );
   }
-
-  const paths = await buildSandboxBinaryPathsFromSource(config.arch, log);
-  assertSandboxBinaryPathsExist(paths);
-  return paths;
 }
 
 async function buildGuestBinaries(
