@@ -87,7 +87,7 @@ await vm.close();
 
 - [Architecture Overview](./architecture.md): high-level component overview and data flow
 - [Security Design](./security.md): threat model, guarantees, and safe operating envelope
-- [Network Stack](./network.md): HTTP/TLS mediation, optional mapped TCP/SSH egress, policy enforcement, DNS, and DNS rebinding protection
+- [Network Stack](./network.md): HTTP/TLS mediation, optional mapped/direct TCP and SSH egress, policy enforcement, DNS, and DNS rebinding protection
 - [VM Backends (QEMU vs krun)](./backends.md): backend capability matrix and constraints
 - [QEMU Backend](./qemu.md): QEMU integration and macOS/Linux parity
 - [Limitations](./limitations.md): current limitations and missing features

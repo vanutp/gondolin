@@ -268,6 +268,9 @@ export type QemuNetworkOptions = {
   /** explicit host-mapped tcp egress configuration */
   tcp?: TcpOptions;
 
+  /** whether to intercept and mediate guest TCP traffic (default: true) */
+  networkInterception?: boolean;
+
   /** http fetch implementation */
   fetch?: HttpFetch;
   /** http interception hooks */
@@ -379,6 +382,7 @@ export class QemuNetworkBackend extends EventEmitter {
     Array<{ resolve: () => void; reject: (err: Error) => void }>
   >();
 
+  private readonly networkInterception: boolean;
   private readonly dnsMode: DnsMode;
   private readonly trustedDnsServers: string[];
   private trustedDnsIndex = 0;
@@ -396,6 +400,16 @@ export class QemuNetworkBackend extends EventEmitter {
   constructor(options: QemuNetworkOptions) {
     super();
     this.options = options;
+    this.networkInterception = options.networkInterception ?? true;
+
+    if (
+      !this.networkInterception &&
+      (options.httpHooks || options.ssh || options.tcp)
+    ) {
+      throw new Error(
+        "networkInterception=false cannot be combined with httpHooks, ssh, or tcp mappings",
+      );
+    }
 
     if (options.debug) {
       this.eventLoopDelay = monitorEventLoopDelay({ resolution: 10 });
@@ -458,13 +472,23 @@ export class QemuNetworkBackend extends EventEmitter {
 
     this.syntheticDnsHostMapping =
       options.dns?.syntheticHostMapping ??
-      (this.ssh.enabled || this.tcp.enabled
+      (this.ssh.enabled || this.tcp.enabled || !this.networkInterception
         ? "per-host"
         : DEFAULT_SYNTHETIC_DNS_HOST_MAPPING);
     this.syntheticDnsHostMap =
       this.syntheticDnsHostMapping === "per-host"
         ? new SyntheticDnsHostMap()
         : null;
+
+    if (
+      !this.networkInterception &&
+      this.dnsMode === "synthetic" &&
+      this.syntheticDnsHostMapping !== "per-host"
+    ) {
+      throw new Error(
+        "networkInterception=false with synthetic DNS requires syntheticHostMapping='per-host'",
+      );
+    }
 
     assertSshDnsConfig({
       ssh: this.ssh,
@@ -595,7 +619,9 @@ export class QemuNetworkBackend extends EventEmitter {
       allowTcpFlow: (info) => {
         if (info.protocol === "tcp") {
           const session = this.tcpSessions.get(info.key);
-          const allowed = Boolean(session?.mappedTcp);
+          const allowed = Boolean(
+            session?.mappedTcp || !this.networkInterception,
+          );
           if (!allowed) {
             if (this.options.debug) {
               this.emitDebug(
@@ -908,7 +934,7 @@ export class QemuNetworkBackend extends EventEmitter {
       }
     } else if (
       syntheticHostname &&
-      this.ssh.sniffPortsSet.has(message.dstPort)
+      (!this.networkInterception || this.ssh.sniffPortsSet.has(message.dstPort))
     ) {
       connectIP = syntheticHostname;
     }
@@ -934,7 +960,9 @@ export class QemuNetworkBackend extends EventEmitter {
     this.stack?.handleTcpConnected({ key: message.key });
     this.flush();
 
-    return { allowRawTcp: Boolean(mappedTcp) };
+    return {
+      allowRawTcp: Boolean(mappedTcp) || !this.networkInterception,
+    };
   }
 
   /** @internal */

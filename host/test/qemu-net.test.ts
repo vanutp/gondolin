@@ -3789,6 +3789,70 @@ test("qemu-net: tcp host mapping resolves host and host:port rules", () => {
   assert.equal(hostOnlySession.connectPort, 9999);
 });
 
+test("qemu-net: disabled interception allows direct raw TCP", () => {
+  const backend = makeBackend({ networkInterception: false });
+  (backend as any).stack = {
+    handleTcpConnected: () => {},
+  };
+
+  const decision = (backend as any).handleTcpConnect({
+    key: "tcp-direct",
+    srcIP: "192.168.127.3",
+    srcPort: 50030,
+    dstIP: "93.184.216.34",
+    dstPort: 443,
+  });
+  const session = (backend as any).tcpSessions.get("tcp-direct");
+
+  assert.equal(decision.allowRawTcp, true);
+  assert.equal(session.connectIP, "93.184.216.34");
+  assert.equal(session.connectPort, 443);
+});
+
+test("qemu-net: disabled interception resolves synthetic hosts directly", () => {
+  const backend = makeBackend({ networkInterception: false });
+  const responses: any[] = [];
+  (backend as any).stack = {
+    handleUdpResponse: (msg: any) => responses.push(msg),
+    handleTcpConnected: () => {},
+  };
+
+  (backend as any).handleUdpSend({
+    key: "udp-direct",
+    srcIP: "192.168.127.3",
+    srcPort: 53030,
+    dstIP: "192.168.127.1",
+    dstPort: 53,
+    payload: buildDnsQueryA("example.com"),
+  });
+  const response = responses[0].data as Buffer;
+  const parts = [...response.subarray(response.length - 4)];
+  const syntheticIp = `${parts[0]}.${parts[1]}.${parts[2]}.${parts[3]}`;
+
+  const decision = (backend as any).handleTcpConnect({
+    key: "tcp-direct-host",
+    srcIP: "192.168.127.3",
+    srcPort: 50031,
+    dstIP: syntheticIp,
+    dstPort: 443,
+  });
+  const session = (backend as any).tcpSessions.get("tcp-direct-host");
+
+  assert.equal(decision.allowRawTcp, true);
+  assert.equal(session.connectIP, "example.com");
+});
+
+test("qemu-net: disabled interception rejects mediated policies", () => {
+  assert.throws(
+    () =>
+      makeBackend({
+        networkInterception: false,
+        httpHooks: { isRequestAllowed: () => true },
+      }),
+    /cannot be combined with httpHooks, ssh, or tcp mappings/,
+  );
+});
+
 test("qemu-net: ssh egress requires synthetic dns mode", () => {
   assert.throws(
     () =>

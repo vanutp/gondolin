@@ -316,6 +316,9 @@ function bashUsage() {
     "                                  Optional: append ,passphrase-env=ENV or ,passphrase=...",
   );
   console.log(
+    "  --disable-network-interception  Allow unrestricted direct TCP egress (unsafe)",
+  );
+  console.log(
     "  --disable-websockets            Disable WebSocket upgrades (egress + ingress)",
   );
   console.log();
@@ -460,6 +463,9 @@ function execUsage() {
     "                                  Optional: append ,passphrase-env=ENV or ,passphrase=...",
   );
   console.log(
+    "  --disable-network-interception  Allow unrestricted direct TCP egress (unsafe)",
+  );
+  console.log(
     "  --disable-websockets            Disable WebSocket upgrades (egress + ingress)",
   );
 }
@@ -498,6 +504,9 @@ type CommonOptions = {
 
   /** minimum rootfs virtual disk size */
   rootfsSize?: string;
+
+  /** disable TCP interception and mediation */
+  disableNetworkInterception?: boolean;
 
   /** disable WebSocket upgrades (both egress and ingress) */
   disableWebSockets?: boolean;
@@ -959,6 +968,20 @@ function buildVmOptions(common: CommonOptions) {
     mounts[path] = new MemoryProvider();
   }
 
+  if (
+    common.disableNetworkInterception &&
+    (common.allowedHosts.length > 0 ||
+      common.secrets.length > 0 ||
+      common.sshAllowedHosts.length > 0 ||
+      common.sshAgent ||
+      common.sshCredentials.length > 0 ||
+      Object.keys(common.tcpHostMappings).length > 0)
+  ) {
+    throw new Error(
+      "--disable-network-interception cannot be combined with HTTP policy, SSH egress, or TCP mapping options",
+    );
+  }
+
   // Build HTTP hooks if we have network options
   let httpHooks;
   let env: Record<string, string> | undefined;
@@ -1106,6 +1129,10 @@ function buildVmOptions(common: CommonOptions) {
       ...(vmOptions.rootfs ?? {}),
       size: common.rootfsSize,
     };
+  }
+
+  if (common.disableNetworkInterception) {
+    vmOptions.networkInterception = false;
   }
 
   if (common.disableWebSockets) {
@@ -1269,6 +1296,10 @@ function parseExecArgs(argv: string[]): ExecArgs {
         } catch (err) {
           fail(err instanceof Error ? err.message : String(err));
         }
+        return i;
+      }
+      case "--disable-network-interception": {
+        args.common.disableNetworkInterception = true;
         return i;
       }
       case "--disable-websockets": {
@@ -1763,6 +1794,10 @@ function parseBashArgs(argv: string[]): BashArgs {
           console.error(err instanceof Error ? err.message : String(err));
           process.exit(1);
         }
+        break;
+      }
+      case "--disable-network-interception": {
+        args.disableNetworkInterception = true;
         break;
       }
       case "--disable-websockets": {

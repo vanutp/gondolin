@@ -91,6 +91,24 @@ Notable consequences:
 
 For deeper conceptual background, see [Network stack](./network.md).
 
+## Direct TCP Egress (Unsafe)
+
+HTTP/TLS interception and TCP protocol restrictions can be disabled globally:
+
+```ts
+const vm = await VM.create({ networkInterception: false });
+```
+
+This allows unrestricted direct TCP connections from the guest. HTTPS remains
+end-to-end encrypted between the guest and destination, but HTTP hooks,
+allowlists, secret injection, internal-range blocking, SSH egress policy, and
+TCP mappings are bypassed. Generic UDP remains unavailable; DNS continues to
+use the configured DNS mode. This option cannot be combined with `httpHooks`,
+`ssh`, or `tcp` configuration.
+
+Only use this mode when guest code is trusted and unrestricted TCP egress is
+acceptable.
+
 ## Mapped TCP Egress (Optional)
 
 If you need guest access to a non-HTTP protocol (for example Postgres in local

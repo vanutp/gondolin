@@ -124,7 +124,7 @@ This is what Gondolin actually enforces.
 
 ### Network Egress Confinement
 
-> "HTTP/TLS is mediated by default, with narrow explicit exceptions for SSH and host-mapped TCP"
+> "HTTP/TLS is mediated by default, with explicit opt-in exceptions"
 
 Gondolin does *not* provide the guest with a raw NAT to the host network.
 
@@ -134,9 +134,10 @@ and a backend that attaches to QEMU's `-netdev stream` Unix socket
 
 Key enforcement points:
 
-1. **Protocol allowlist + explicit TCP mappings**
+1. **Protocol allowlist + explicit TCP modes**
 
-        - For each outgoing TCP flow, the host first checks whether an explicit `tcp.hosts` mapping matches the synthetic hostname (+ optional port)
+        - When `networkInterception: false`, all TCP flows are forwarded directly and the restrictions below do not apply
+        - Otherwise, for each outgoing TCP flow, the host first checks whether an explicit `tcp.hosts` mapping matches the synthetic hostname (+ optional port)
             - this requires `dns.mode: "synthetic"` and `dns.syntheticHostMapping: "per-host"`
             - if matched, the flow is marked as mapped `tcp` and forwarded to the configured upstream `HOST:PORT`
         - Otherwise, the host sniffs first bytes and classifies as:
@@ -194,19 +195,22 @@ Key enforcement points:
 | HTTP/TLS (default) | Hostname allowlists + DNS/IP checks | Full HTTP mediation (`fetch`, redirects, policy hooks) | Yes |
 | SSH egress (optional) | `ssh.allowedHosts` (`HOST[:PORT]`) | SSH proxy with host-key verification and exec restrictions | No |
 | Mapped TCP (optional) | `tcp.hosts` (`HOST[:PORT] -> HOST:PORT`) via synthetic per-host attribution | Raw TCP forwarding to explicit mapped target | No |
+| Direct TCP (unsafe) | Guest-selected destination | Raw unrestricted TCP forwarding | No |
 
-**Guarantee:** the guest cannot open arbitrary raw TCP tunnels, cannot use UDP (except DNS), and cannot
+**Guarantee (interception enabled):** the guest cannot open arbitrary raw TCP tunnels, cannot use UDP (except DNS), and cannot
 reach blocked networks (e.g. localhost/metadata) *through DNS tricks or redirects* in HTTP/TLS flows,
 as long as `httpHooks.isRequestAllowed` / `httpHooks.isIpAllowed` enforce those rules.
 
-Mapped TCP and SSH egress are explicit exception paths with their own policy controls.
+Mapped TCP and SSH egress are explicit exception paths with their own policy controls. Direct TCP mode
+removes TCP egress confinement entirely and is unsuitable for untrusted guests unless that risk is accepted.
 
 This does **not** change the core trust assumptions (host trusted, guest untrusted), but it
 changes what must be reasoned about in policy:
 
 - HTTP/TLS flows get content-aware mediation and HTTP-level policy enforcement
 - SSH/mapped TCP flows are transport-level controls (target allowlisting/mapping), not HTTP-level controls
-- Exfiltration risk for those exception paths is bounded by what targets you explicitly configure
+- Exfiltration risk for SSH/mapped TCP is bounded by what targets you explicitly configure
+- Direct TCP permits guest-selected destinations and therefore does not bound TCP exfiltration
 
 DNS within the system is supported because there is utility in it, but DNS resolutions are
 fully disregarded by the HTTP stack as the host will resolve it from scratch.

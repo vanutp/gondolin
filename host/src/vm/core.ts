@@ -317,6 +317,12 @@ export class VM {
         options.maxHttpResponseBodyBytes;
     }
     if (
+      options.networkInterception !== undefined &&
+      sandboxOptions.networkInterception === undefined
+    ) {
+      sandboxOptions.networkInterception = options.networkInterception;
+    }
+    if (
       options.allowWebSockets !== undefined &&
       sandboxOptions.allowWebSockets === undefined
     ) {
@@ -366,7 +372,10 @@ export class VM {
     const mitmMounts = resolveMitmMounts(
       options.vfs,
       options.sandbox?.mitmCertDir,
-      options.sandbox?.netEnabled ?? true,
+      (options.sandbox?.netEnabled ?? true) &&
+        (options.networkInterception ??
+          options.sandbox?.networkInterception ??
+          true),
     );
 
     // Inject a guarded /etc/gondolin mount (host-authoritative ingress configuration)
@@ -415,7 +424,10 @@ export class VM {
       const injectedMounts = resolveMitmMounts(
         undefined,
         sandboxOptions.mitmCertDir,
-        sandboxOptions.netEnabled ?? true,
+        (sandboxOptions.netEnabled ?? true) &&
+          (options.networkInterception ??
+            sandboxOptions.networkInterception ??
+            true),
       );
       if (Object.keys(injectedMounts).length > 0) {
         const normalized = normalizeMountMap({
@@ -461,6 +473,12 @@ export class VM {
     ) {
       (sandboxOptions as any).maxHttpResponseBodyBytes =
         options.maxHttpResponseBodyBytes;
+    }
+    if (
+      options.networkInterception !== undefined &&
+      sandboxOptions.networkInterception === undefined
+    ) {
+      sandboxOptions.networkInterception = options.networkInterception;
     }
     if (
       options.allowWebSockets !== undefined &&

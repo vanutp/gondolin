@@ -105,7 +105,7 @@ It's useful to think of Gondolin as two planes:
 
 - **Data plane:** guest-visible "normal" Linux interfaces
 
-    - `eth0` exists, but egress is mediated by the host (no generic NAT)
+    - `eth0` exists, but egress is handled by the host userspace stack (no generic NAT); unsafe direct TCP forwarding is optional
     - files under mounted VFS paths behave like normal paths, but operations are
     served by host providers
 
@@ -125,7 +125,7 @@ normal operation.
 From the guest's point of view, networking looks ordinary: it opens TCP sockets
 and writes bytes.
 
-On the host side, Gondolin does **not** provide a generic NAT. Instead:
+On the host side, Gondolin does **not** provide a generic NAT. Instead (unless unsafe direct TCP forwarding is enabled):
 
 1. The guest emits Ethernet frames via virtio-net.
 2. The host receives frames and implements a small userspace network stack.

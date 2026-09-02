@@ -88,6 +88,8 @@ export type SandboxServerOptions = {
   netMac?: string;
   /** whether to enable networking */
   netEnabled?: boolean;
+  /** whether to intercept and mediate guest TCP traffic (default: true) */
+  networkInterception?: boolean;
   /** whether to allow WebSocket upgrades for guest egress (default: true) */
   allowWebSockets?: boolean;
 
@@ -209,6 +211,8 @@ export type ResolvedSandboxServerOptions = {
   netMac: string;
   /** whether networking is enabled */
   netEnabled: boolean;
+  /** whether guest TCP traffic is intercepted and mediated */
+  networkInterception: boolean;
   /** whether to allow WebSocket upgrades for guest egress */
   allowWebSockets: boolean;
 
@@ -1024,6 +1028,7 @@ export function resolveSandboxServerOptions(
     netSocketPath: options.netSocketPath ?? defaultNetSock,
     netMac: options.netMac ?? defaultNetMac,
     netEnabled: options.netEnabled ?? true,
+    networkInterception: options.networkInterception ?? true,
     allowWebSockets: options.allowWebSockets ?? true,
     debug,
     machineType: options.machineType,

@@ -196,6 +196,23 @@ connection caps and timeouts (configurable via `ssh.*` options):
 - max concurrent upstream SSH connections total (across all flows)
 - bounded handshake (`readyTimeout`) and SSH keepalives
 
+## Direct TCP Egress (Optional, Unsafe)
+
+Setting `networkInterception: false` in the SDK, or passing
+`--disable-network-interception` to the CLI, bypasses protocol classification
+and HTTP/TLS mediation for all guest TCP flows. The host forwards each flow as
+raw TCP to its destination. This also bypasses HTTP hooks, host allowlists,
+secret injection, internal-range blocking, SSH egress policy, and mapped TCP
+rules.
+
+This is not full generic NAT: non-DNS UDP remains unavailable. With synthetic
+DNS, Gondolin uses per-host synthetic addresses and opens the raw connection to
+the corresponding hostname.
+
+Do not enable this mode for untrusted guest code unless unrestricted TCP egress
+is acceptable. It cannot be combined with `httpHooks`, `ssh`, or `tcp`
+configuration.
+
 ## Host-Mapped TCP Egress (Optional)
 
 For selected workloads, Gondolin can forward specific guest hostnames/ports to
@@ -341,8 +358,9 @@ Common limitations include:
 - WebSocket upgrades are supported, but after the `101` response the connection becomes an opaque tunnel (only the request handshake is mediated/hookable). Disable via `allowWebSockets: false` / `--disable-websockets`
 - No HTTP `CONNECT`
 - No generic UDP (DNS-only)
-- No arbitrary TCP/NAT mode
-    - allowed TCP paths are limited to HTTP/TLS mediation, optional proxied SSH egress, and optional explicit host-mapped TCP rules
+- No full generic NAT mode
+    - the optional direct mode supports unrestricted TCP, but non-DNS UDP remains unavailable
+    - intercepted mode limits TCP to HTTP/TLS mediation, optional proxied SSH egress, and optional explicit host-mapped TCP rules
 - Limited handling for unusual IP behaviors (e.g. fragmentation is not a target feature)
 
 If your workload needs general networking, Gondolin's security properties will

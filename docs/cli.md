@@ -103,6 +103,11 @@ without exposing them inside the VM (for HTTP/TLS-mediated flows).
     - The secret is only permitted for the listed host(s)
     - If `=VALUE` is omitted, the value is read from the host environment variable `$NAME`
 
+- `--disable-network-interception`
+    - Allow unrestricted direct TCP egress without HTTP/TLS interception
+    - Bypasses allowlists, hooks, secret injection, internal-range blocking, SSH egress policy, and TCP mappings
+    - Unsafe for untrusted guest code; generic non-DNS UDP remains unavailable
+
 - `--disable-websockets`
     - Disable WebSocket upgrades through the bridge
     - Affects both:

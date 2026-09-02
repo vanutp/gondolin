@@ -47,6 +47,8 @@ export type VMOptions = {
   maxHttpBodyBytes?: number;
   /** max buffered upstream http response body size in `bytes` */
   maxHttpResponseBodyBytes?: number;
+  /** whether to intercept and mediate guest TCP traffic (default: true) */
+  networkInterception?: boolean;
   /** whether to allow WebSocket upgrades for guest egress (default: true) */
   allowWebSockets?: boolean;
   /** vfs configuration (null disables vfs integration) */

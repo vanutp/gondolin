@@ -4,6 +4,7 @@ All notable changes to Gondolin are documented here.
 
 ## Unreleased
 
+- Add optional unrestricted direct TCP egress via `networkInterception: false` / `--disable-network-interception`
 - Fix `chmod` on hostfs and memfs VFS mounts #115
 - Fix FUSE directory pagination skipping entries when a directory is mutated during recursive removal
 

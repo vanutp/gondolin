@@ -49,6 +49,27 @@ test("buildVmOptions keeps implicit open egress for host secrets without --allow
   );
 });
 
+test("buildVmOptions disables network interception", () => {
+  const vmOptions = __test.buildVmOptions(
+    makeCommonOptions({ disableNetworkInterception: true }) as any,
+  );
+
+  assert.equal(vmOptions.networkInterception, false);
+});
+
+test("buildVmOptions rejects policies with disabled interception", () => {
+  assert.throws(
+    () =>
+      __test.buildVmOptions(
+        makeCommonOptions({
+          disableNetworkInterception: true,
+          allowedHosts: ["example.com"],
+        }) as any,
+      ),
+    /cannot be combined with HTTP policy, SSH egress, or TCP mapping options/,
+  );
+});
+
 test("parseHostSecret supports host discovery mode from env", () => {
   process.env.API_KEY = "secret-value";
   try {

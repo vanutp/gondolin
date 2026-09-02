@@ -83,12 +83,13 @@ This is required for Gondolin's goals:
 
 - Only allow specific mediated protocols (primarily HTTP and TLS that can be intercepted)
 - Enforce destination policy (allowlist + internal-range blocking)
-- Prevent arbitrary TCP tunneling (with only narrow explicit exceptions like SSH egress and mapped TCP rules)
+- Prevent arbitrary TCP tunneling (with explicit opt-in exceptions like SSH egress, mapped TCP rules, or unsafe direct TCP mode)
 - Enable request and response hooks
 - Inject secrets at the network layer without exposing them to the guest
 
 A generic NAT would turn the guest into a normal machine on your network, which
-is the opposite of the threat model.
+is the opposite of the default threat model. The optional direct TCP mode
+intentionally relaxes TCP egress confinement without adding generic UDP/NAT.
 
 For details of the mediation pipeline, see [Network stack](./network.md).
 
